@@ -15,10 +15,47 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
   const [dimensions, setDimensions] = useState({ width: 400, height: 450 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
-  const { updateNodeMessages, updateNodeLoading } = useCanvasStore();
+  const { updateNodeMessages, updateNodeLoading, updateNodeTitle, updateNodeGeneratingTitle, setFocusedNode } = useCanvasStore();
   const { onSelectionChange } = useSelection();
 
-  const { messages, seedText, isLoading } = data;
+  const { messages, seedText, title, isLoading, isGeneratingTitle } = data;
+
+  // Generate title after first assistant response
+  const generateTitle = useCallback(async (currentMessages: DbMessage[]) => {
+    // Only generate if we don't have a title and have at least one exchange
+    const hasAssistantMessage = currentMessages.some(m => m.role === 'assistant');
+    if (title || !hasAssistantMessage) return;
+
+    updateNodeGeneratingTitle(id, true);
+
+    try {
+      const response = await fetch('/api/generate-title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: currentMessages,
+          seedText 
+        }),
+      });
+
+      if (response.ok) {
+        const { title: generatedTitle } = await response.json();
+        
+        // Save to database
+        await supabase
+          .from('nodes')
+          .update({ title: generatedTitle })
+          .eq('id', id);
+
+        // Update local state
+        updateNodeTitle(id, generatedTitle);
+      }
+    } catch (error) {
+      console.error('Error generating title:', error);
+    } finally {
+      updateNodeGeneratingTitle(id, false);
+    }
+  }, [id, title, seedText, supabase, updateNodeTitle, updateNodeGeneratingTitle]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -153,8 +190,14 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
       });
 
       // Update local state with final message
-      updateNodeMessages(id, [...newMessages, assistantMessage]);
+      const finalMessages = [...newMessages, assistantMessage];
+      updateNodeMessages(id, finalMessages);
       setStreamingContent('');
+
+      // Generate title after first assistant response
+      if (!title) {
+        generateTitle(finalMessages);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
@@ -193,9 +236,74 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
         />
 
         {/* Header */}
-        <div className="px-4 py-3 border-b border-stone-100 flex items-center gap-2 shrink-0">
-          <div className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span className="text-sm font-medium text-stone-600">chat</span>
+        <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${seedText ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+            {isGeneratingTitle ? (
+              <span className="text-sm font-medium text-stone-400 italic">generating title...</span>
+            ) : title ? (
+              <span className="text-sm font-medium text-stone-600 truncate" title={title}>
+                {title}
+              </span>
+            ) : seedText ? (
+              <span className="text-sm font-medium text-stone-600 truncate" title={`branched from: "${seedText}"`}>
+                branched: &ldquo;{seedText.length > 20 ? seedText.slice(0, 20) + '...' : seedText}&rdquo;
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-stone-600">new chat</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setFocusedNode(id)}
+              className="p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-md transition-colors nodrag"
+              title="expand to fullscreen"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                // Trigger React Flow's delete by dispatching a remove change
+                const event = new CustomEvent('deleteNode', { detail: { nodeId: id } });
+                window.dispatchEvent(event);
+              }}
+              className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors nodrag"
+              title="delete chat"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                <line x1="10" x2="10" y1="11" y2="17" />
+                <line x1="14" x2="14" y1="11" y2="17" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Seed text chip */}

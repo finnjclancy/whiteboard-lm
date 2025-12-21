@@ -62,7 +62,9 @@ export default async function CanvasPage({ params }: CanvasPageProps) {
       ),
       seedText: node.seed_text,
       parentNodeId: node.parent_node_id,
+      title: node.title,
       isLoading: false,
+      isGeneratingTitle: false,
     },
   }));
 

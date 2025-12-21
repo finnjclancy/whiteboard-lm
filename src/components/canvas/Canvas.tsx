@@ -15,6 +15,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import ChatNode from './ChatNode';
 import BranchPill from './BranchPill';
 import ContextMenu from './ContextMenu';
+import FocusedChat from '@/components/chat/FocusedChat';
 import type { ChatNode as ChatNodeType, BranchEdge, TextSelection } from '@/types';
 
 const nodeTypes = {
@@ -88,11 +89,13 @@ function CanvasInner({
   const {
     nodes,
     edges,
+    focusedNodeId,
     setCanvasId,
     setNodes,
     setEdges,
     addNode,
     addEdge,
+    setFocusedNode,
     onNodesChange,
     onEdgesChange,
   } = useCanvasStore();
@@ -111,14 +114,18 @@ function CanvasInner({
     selectionRef.current.onSelectionChange = setSelection;
   }, [selectionRef]);
 
-  // Initialize store with server data
+  // Initialize store with server data - only on mount or canvas change
+  const initializedRef = useRef(false);
   useEffect(() => {
-    setCanvasId(canvasId);
-    setNodes(initialNodes);
-    setEdges(initialEdges);
+    if (!initializedRef.current || canvasId !== useCanvasStore.getState().canvasId) {
+      setCanvasId(canvasId);
+      setNodes(initialNodes);
+      setEdges(initialEdges);
+      initializedRef.current = true;
+    }
   }, [canvasId, initialNodes, initialEdges, setCanvasId, setNodes, setEdges]);
 
-  // Handle node position changes (persist to DB)
+  // Handle node changes (position and deletion) - persist to DB
   const handleNodesChange = useCallback(
     async (changes: any) => {
       onNodesChange(changes);
@@ -140,8 +147,26 @@ function CanvasInner({
             .eq('id', node.id);
         }
       }
+
+      // Persist deletions
+      const removeChanges = changes.filter(
+        (change: any) => change.type === 'remove'
+      );
+
+      for (const change of removeChanges) {
+        // Delete the node (cascade will delete messages and edges)
+        await supabase.from('nodes').delete().eq('id', change.id);
+        
+        // Also remove any edges connected to this node from local state
+        const edgesToRemove = edges.filter(
+          (e) => e.source === change.id || e.target === change.id
+        );
+        for (const edge of edgesToRemove) {
+          await supabase.from('edges').delete().eq('id', edge.id);
+        }
+      }
     },
-    [onNodesChange, nodes, supabase]
+    [onNodesChange, nodes, edges, supabase]
   );
 
   // Handle right-click context menu
@@ -196,7 +221,9 @@ function CanvasInner({
           messages: [],
           seedText: null,
           parentNodeId: null,
+          title: null,
           isLoading: false,
+          isGeneratingTitle: false,
         },
       };
 
@@ -258,7 +285,9 @@ function CanvasInner({
           messages: [],
           seedText,
           parentNodeId,
+          title: null,
           isLoading: false,
+          isGeneratingTitle: false,
         },
       };
 
@@ -299,6 +328,39 @@ function CanvasInner({
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
   }, []);
+
+  // Handle node deletion from custom event
+  useEffect(() => {
+    const handleDeleteNode = async (e: CustomEvent<{ nodeId: string }>) => {
+      const { nodeId } = e.detail;
+      
+      // Delete from database first
+      await supabase.from('nodes').delete().eq('id', nodeId);
+      
+      // Remove connected edges from database
+      const connectedEdges = edges.filter(
+        (edge) => edge.source === nodeId || edge.target === nodeId
+      );
+      for (const edge of connectedEdges) {
+        await supabase.from('edges').delete().eq('id', edge.id);
+      }
+      
+      // Update local state
+      onNodesChange([{ type: 'remove', id: nodeId }]);
+      
+      // Remove connected edges from local state
+      const edgeChanges = connectedEdges.map((edge) => ({
+        type: 'remove' as const,
+        id: edge.id,
+      }));
+      if (edgeChanges.length > 0) {
+        onEdgesChange(edgeChanges);
+      }
+    };
+
+    window.addEventListener('deleteNode', handleDeleteNode as EventListener);
+    return () => window.removeEventListener('deleteNode', handleDeleteNode as EventListener);
+  }, [edges, supabase, onNodesChange, onEdgesChange]);
 
   return (
     <SelectionContext.Provider value={selectionRef.current}>
@@ -379,6 +441,19 @@ function CanvasInner({
           )}
         </div>
       </div>
+
+      {/* Focused chat fullscreen overlay */}
+      {focusedNodeId && (() => {
+        const focusedNode = nodes.find((n) => n.id === focusedNodeId);
+        if (!focusedNode) return null;
+        return (
+          <FocusedChat
+            nodeId={focusedNodeId}
+            data={focusedNode.data}
+            onClose={() => setFocusedNode(null)}
+          />
+        );
+      })()}
     </SelectionContext.Provider>
   );
 }

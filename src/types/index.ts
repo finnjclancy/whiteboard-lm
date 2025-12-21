@@ -16,6 +16,7 @@ export interface DbNode {
   position_x: number;
   position_y: number;
   seed_text: string | null;
+  title: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -41,7 +42,9 @@ export interface ChatNodeData {
   messages: DbMessage[];
   seedText: string | null;
   parentNodeId: string | null;
+  title: string | null;
   isLoading?: boolean;
+  isGeneratingTitle?: boolean;
 }
 
 // React Flow typed node
@@ -55,6 +58,7 @@ export interface CanvasState {
   canvasId: string | null;
   nodes: ChatNode[];
   edges: BranchEdge[];
+  focusedNodeId: string | null;
   setCanvasId: (id: string) => void;
   setNodes: (nodes: ChatNode[]) => void;
   setEdges: (edges: BranchEdge[]) => void;
@@ -62,6 +66,9 @@ export interface CanvasState {
   addEdge: (edge: BranchEdge) => void;
   updateNodeMessages: (nodeId: string, messages: DbMessage[]) => void;
   updateNodeLoading: (nodeId: string, isLoading: boolean) => void;
+  updateNodeTitle: (nodeId: string, title: string | null) => void;
+  updateNodeGeneratingTitle: (nodeId: string, isGenerating: boolean) => void;
+  setFocusedNode: (nodeId: string | null) => void;
   onNodesChange: (changes: any) => void;
   onEdgesChange: (changes: any) => void;
 }

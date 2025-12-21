@@ -11,6 +11,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   canvasId: null,
   nodes: [],
   edges: [],
+  focusedNodeId: null,
 
   setCanvasId: (id: string) => set({ canvasId: id }),
 
@@ -41,6 +42,26 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           : node
       ),
     })),
+
+  updateNodeTitle: (nodeId: string, title: string | null) =>
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, title } }
+          : node
+      ),
+    })),
+
+  updateNodeGeneratingTitle: (nodeId: string, isGenerating: boolean) =>
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, isGeneratingTitle: isGenerating } }
+          : node
+      ),
+    })),
+
+  setFocusedNode: (nodeId: string | null) => set({ focusedNodeId: nodeId }),
 
   onNodesChange: (changes: NodeChange[]) =>
     set((state) => ({
