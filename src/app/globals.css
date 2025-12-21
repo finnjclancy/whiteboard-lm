@@ -1,0 +1,175 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+:root {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* React Flow customization */
+.react-flow__node {
+  cursor: grab;
+}
+
+.react-flow__node:active {
+  cursor: grabbing;
+}
+
+/* Allow text selection in message areas */
+.react-flow__node .select-text,
+.react-flow__node .select-text * {
+  cursor: text !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.react-flow__node .nodrag {
+  pointer-events: auto;
+}
+
+.react-flow__controls {
+  box-shadow: none !important;
+}
+
+.react-flow__controls-button {
+  border: none !important;
+  background: white !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #f5f5f4 !important;
+}
+
+/* Node resize handles */
+.react-flow__resize-control.handle {
+  opacity: 0.4;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.react-flow__resize-control.handle:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+.react-flow__node:hover .react-flow__resize-control.handle {
+  opacity: 0.7;
+}
+
+/* Animation utilities */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(4px) translateX(-50%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(-100%) translateX(-50%);
+    opacity: 1;
+  }
+}
+
+.animate-in {
+  animation: fade-in 150ms ease-out, slide-in-from-bottom 150ms ease-out;
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Prose customization for chat bubbles */
+.prose {
+  --tw-prose-body: #44403c;
+  --tw-prose-headings: #1c1917;
+  --tw-prose-links: #1c1917;
+  --tw-prose-bold: #1c1917;
+  --tw-prose-code: #1c1917;
+  --tw-prose-pre-bg: #f5f5f4;
+}
+
+.prose p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose p:first-child {
+  margin-top: 0;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose ul, .prose ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.25em;
+}
+
+.prose li {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+
+.prose code {
+  font-size: 0.875em;
+  background: #e7e5e4;
+  padding: 0.125em 0.25em;
+  border-radius: 0.25em;
+}
+
+.prose pre {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding: 0.75em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+}
+
+.prose pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.prose h1, .prose h2, .prose h3 {
+  margin-top: 0.75em;
+  margin-bottom: 0.25em;
+  font-weight: 600;
+}
+
+.prose h1:first-child,
+.prose h2:first-child,
+.prose h3:first-child {
+  margin-top: 0;
+}
+
+.prose blockquote {
+  border-left: 3px solid #d6d3d1;
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  font-style: italic;
+}
