@@ -15,10 +15,14 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
   const [dimensions, setDimensions] = useState({ width: 400, height: 450 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
-  const { updateNodeMessages, updateNodeLoading, updateNodeTitle, updateNodeGeneratingTitle, setFocusedNode } = useCanvasStore();
+  const { nodes, updateNodeMessages, updateNodeLoading, updateNodeTitle, updateNodeGeneratingTitle, setFocusedNode } = useCanvasStore();
   const { onSelectionChange } = useSelection();
 
-  const { messages, seedText, title, isLoading, isGeneratingTitle } = data;
+  const { messages, seedText, parentNodeId, title, isLoading, isGeneratingTitle } = data;
+
+  // Look up parent node's title
+  const parentNode = parentNodeId ? nodes.find((n) => n.id === parentNodeId) : null;
+  const parentTitle = parentNode?.data?.title || 'untitled chat';
 
   // Generate title after first assistant response
   const generateTitle = useCallback(async (currentMessages: DbMessage[]) => {
@@ -306,10 +310,28 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
           </div>
         </div>
 
-        {/* Seed text chip */}
-        {seedText && (
+        {/* Seed text chip - shows parent info for branched nodes */}
+        {seedText && parentNodeId && (
           <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 shrink-0">
-            <div className="text-xs text-amber-600 font-medium mb-1">branched from:</div>
+            <div className="flex items-center gap-1 text-xs text-amber-600 font-medium mb-1">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 3v12" />
+                <circle cx="18" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <path d="M18 9a9 9 0 0 1-9 9" />
+              </svg>
+              from: {parentTitle}
+            </div>
             <div className="text-sm text-amber-800 line-clamp-2">&ldquo;{seedText}&rdquo;</div>
           </div>
         )}

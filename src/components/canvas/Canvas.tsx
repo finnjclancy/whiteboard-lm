@@ -108,6 +108,31 @@ function CanvasInner({
     flowX: 0,
     flowY: 0,
   });
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(canvasName);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [isEditingName]);
+
+  // Save canvas name
+  const handleSaveName = async () => {
+    const trimmedName = editedName.trim();
+    if (trimmedName && trimmedName !== canvasName) {
+      await supabase
+        .from('canvases')
+        .update({ name: trimmedName })
+        .eq('id', canvasId);
+    } else {
+      setEditedName(canvasName);
+    }
+    setIsEditingName(false);
+  };
 
   // Set up selection handler for context
   useEffect(() => {
@@ -242,10 +267,17 @@ function CanvasInner({
       const nodeId = uuidv4();
       const edgeId = uuidv4();
 
-      // Position new node to the right and slightly down from parent
+      // Count existing branches from this parent to offset the new one
+      const existingBranches = nodes.filter(
+        (n) => n.data.parentNodeId === parentNodeId
+      );
+      const branchIndex = existingBranches.length;
+
+      // Position new node to the right, with vertical offset based on branch count
+      // Each branch is offset by 150px vertically to avoid overlap
       const position = {
-        x: parentNode.position.x + 450,
-        y: parentNode.position.y + 100,
+        x: parentNode.position.x + 480,
+        y: parentNode.position.y + (branchIndex * 180),
       };
 
       // Create node in database
@@ -386,7 +418,31 @@ function CanvasInner({
                 <path d="m15 18-6-6 6-6" />
               </svg>
             </button>
-            <h1 className="font-medium text-stone-900">{canvasName}</h1>
+            {isEditingName ? (
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveName();
+                  if (e.key === 'Escape') {
+                    setEditedName(canvasName);
+                    setIsEditingName(false);
+                  }
+                }}
+                className="font-medium text-stone-900 bg-transparent border-b border-stone-300 focus:border-stone-500 outline-none px-1"
+              />
+            ) : (
+              <button
+                onClick={() => setIsEditingName(true)}
+                className="font-medium text-stone-900 hover:bg-stone-100 px-2 py-1 rounded transition-colors"
+                title="click to edit name"
+              >
+                {editedName}
+              </button>
+            )}
           </div>
           <div className="text-sm text-stone-400">
             right-click to create a chat
