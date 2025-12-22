@@ -16,8 +16,11 @@ interface FocusedChatProps {
 export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps) {
   const [input, setInput] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
   const { nodes, updateNodeMessages, updateNodeLoading, updateNodeTitle, updateNodeGeneratingTitle } = useCanvasStore();
 
@@ -27,10 +30,18 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
   const parentNode = parentNodeId ? nodes.find((n) => n.id === parentNodeId) : null;
   const parentTitle = parentNode?.data?.title || 'untitled chat';
 
-  // Generate title after first assistant response
-  const generateTitle = useCallback(async (currentMessages: DbMessage[]) => {
-    const hasAssistantMessage = currentMessages.some(m => m.role === 'assistant');
-    if (title || !hasAssistantMessage) return;
+  // Focus title input when editing starts
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  // Generate title from user's first question (runs in parallel with chat response)
+  const generateTitleFromQuestion = useCallback(async (userQuestion: string) => {
+    // Only generate if this is the first message and no title exists
+    if (title || messages.length > 0) return;
 
     updateNodeGeneratingTitle(nodeId, true);
 
@@ -39,7 +50,7 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: currentMessages,
+          userQuestion,
           seedText 
         }),
       });
@@ -47,11 +58,13 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
       if (response.ok) {
         const { title: generatedTitle } = await response.json();
         
+        // Save to database
         await supabase
           .from('nodes')
           .update({ title: generatedTitle })
           .eq('id', nodeId);
 
+        // Update local state
         updateNodeTitle(nodeId, generatedTitle);
       }
     } catch (error) {
@@ -59,11 +72,30 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
     } finally {
       updateNodeGeneratingTitle(nodeId, false);
     }
-  }, [nodeId, title, seedText, supabase, updateNodeTitle, updateNodeGeneratingTitle]);
+  }, [nodeId, title, messages.length, seedText, supabase, updateNodeTitle, updateNodeGeneratingTitle]);
+
+  // Save edited title
+  const handleSaveTitle = async () => {
+    const trimmedTitle = editedTitle.trim();
+    if (trimmedTitle && trimmedTitle !== title) {
+      // Save to database
+      await supabase
+        .from('nodes')
+        .update({ title: trimmedTitle })
+        .eq('id', nodeId);
+      
+      // Update local state
+      updateNodeTitle(nodeId, trimmedTitle);
+    }
+    setIsEditingTitle(false);
+  };
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [messages, streamingContent]);
 
   // Focus input on mount
@@ -74,14 +106,14 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
   // Handle escape key to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !isEditingTitle) {
         onClose();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, isEditingTitle]);
 
   // Send message
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,9 +139,15 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
     // Update local state
     const newMessages = [...messages, userMessage];
     updateNodeMessages(nodeId, newMessages);
+    const questionText = input.trim();
     setInput('');
     updateNodeLoading(nodeId, true);
     setStreamingContent('');
+
+    // Generate title in parallel if this is the first message
+    if (messages.length === 0 && !title) {
+      generateTitleFromQuestion(questionText);
+    }
 
     try {
       // Build messages for API (include seed text as context if present)
@@ -190,11 +228,6 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
       const finalMessages = [...newMessages, assistantMessage];
       updateNodeMessages(nodeId, finalMessages);
       setStreamingContent('');
-
-      // Generate title after first assistant response
-      if (!title) {
-        generateTitle(finalMessages);
-      }
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
@@ -229,24 +262,64 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
         </div>
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${seedText ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-          <span className="text-sm font-medium text-stone-700">
-            {isGeneratingTitle ? (
-              <span className="italic text-stone-400">generating title...</span>
-            ) : title ? (
-              title
-            ) : seedText ? (
-              `branched: "${seedText.length > 40 ? seedText.slice(0, 40) + '...' : seedText}"`
-            ) : (
-              'new chat'
-            )}
-          </span>
+          {isEditingTitle ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={editedTitle}
+              onChange={(e) => setEditedTitle(e.target.value)}
+              onBlur={handleSaveTitle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveTitle();
+                if (e.key === 'Escape') {
+                  setIsEditingTitle(false);
+                  e.stopPropagation(); // prevent closing fullscreen
+                }
+              }}
+              className="text-sm font-medium text-stone-700 bg-stone-100 px-2 py-0.5 rounded border border-stone-300 outline-none focus:border-stone-400"
+              placeholder="enter title..."
+            />
+          ) : isGeneratingTitle ? (
+            <span className="text-sm font-medium text-stone-400 italic">generating title...</span>
+          ) : title ? (
+            <span
+              className="text-sm font-medium text-stone-700 cursor-pointer hover:text-stone-900"
+              title="click to edit title"
+              onClick={() => {
+                setEditedTitle(title);
+                setIsEditingTitle(true);
+              }}
+            >
+              {title}
+            </span>
+          ) : seedText ? (
+            <span
+              className="text-sm font-medium text-stone-700 cursor-pointer hover:text-stone-900"
+              title="click to edit title"
+              onClick={() => {
+                setEditedTitle('');
+                setIsEditingTitle(true);
+              }}
+            >
+              branched: &ldquo;{seedText.length > 40 ? seedText.slice(0, 40) + '...' : seedText}&rdquo;
+            </span>
+          ) : (
+            <span
+              className="text-sm font-medium text-stone-700 cursor-pointer hover:text-stone-900"
+              onClick={() => {
+                setEditedTitle('');
+                setIsEditingTitle(true);
+              }}
+            >
+              new chat
+            </span>
+          )}
         </div>
         <div className="text-sm text-stone-400">
           press <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-xs font-mono">esc</kbd> to exit
         </div>
       </header>
 
-      {/* Seed text context */}
       {/* Seed text context - shows parent info for branched chats */}
       {seedText && parentNodeId && (
         <div className="bg-amber-50 border-b border-amber-100 px-4 py-3 shrink-0">
@@ -276,7 +349,7 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="text-center text-stone-400 py-16">
@@ -330,8 +403,6 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
               </div>
             </div>
           )}
-
-          <div ref={messagesEndRef} />
         </div>
       </div>
 
@@ -374,4 +445,3 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
     </div>
   );
 }
-

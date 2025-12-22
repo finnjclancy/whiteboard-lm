@@ -13,7 +13,10 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
   const [input, setInput] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   const [dimensions, setDimensions] = useState({ width: 400, height: 450 });
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
   const { nodes, updateNodeMessages, updateNodeLoading, updateNodeTitle, updateNodeGeneratingTitle, setFocusedNode } = useCanvasStore();
   const { onSelectionChange } = useSelection();
@@ -24,11 +27,18 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
   const parentNode = parentNodeId ? nodes.find((n) => n.id === parentNodeId) : null;
   const parentTitle = parentNode?.data?.title || 'untitled chat';
 
-  // Generate title after first assistant response
-  const generateTitle = useCallback(async (currentMessages: DbMessage[]) => {
-    // Only generate if we don't have a title and have at least one exchange
-    const hasAssistantMessage = currentMessages.some(m => m.role === 'assistant');
-    if (title || !hasAssistantMessage) return;
+  // Focus title input when editing starts
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  // Generate title from user's first question (runs in parallel with chat response)
+  const generateTitleFromQuestion = useCallback(async (userQuestion: string) => {
+    // Only generate if this is the first message and no title exists
+    if (title || messages.length > 0) return;
 
     updateNodeGeneratingTitle(id, true);
 
@@ -37,7 +47,7 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: currentMessages,
+          userQuestion,
           seedText 
         }),
       });
@@ -59,11 +69,30 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
     } finally {
       updateNodeGeneratingTitle(id, false);
     }
-  }, [id, title, seedText, supabase, updateNodeTitle, updateNodeGeneratingTitle]);
+  }, [id, title, messages.length, seedText, supabase, updateNodeTitle, updateNodeGeneratingTitle]);
 
-  // Auto-scroll to bottom when messages change
+  // Save edited title
+  const handleSaveTitle = async () => {
+    const trimmedTitle = editedTitle.trim();
+    if (trimmedTitle && trimmedTitle !== title) {
+      // Save to database
+      await supabase
+        .from('nodes')
+        .update({ title: trimmedTitle })
+        .eq('id', id);
+      
+      // Update local state
+      updateNodeTitle(id, trimmedTitle);
+    }
+    setIsEditingTitle(false);
+  };
+
+  // Auto-scroll to bottom when messages change (scroll container directly to avoid canvas scroll)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [messages, streamingContent]);
 
   // Handle text selection for branching
@@ -114,9 +143,15 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
     // Update local state
     const newMessages = [...messages, userMessage];
     updateNodeMessages(id, newMessages);
+    const questionText = input.trim();
     setInput('');
     updateNodeLoading(id, true);
     setStreamingContent('');
+
+    // Generate title in parallel if this is the first message
+    if (messages.length === 0 && !title) {
+      generateTitleFromQuestion(questionText);
+    }
 
     try {
       // Build messages for API (include seed text as context if present)
@@ -197,11 +232,6 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
       const finalMessages = [...newMessages, assistantMessage];
       updateNodeMessages(id, finalMessages);
       setStreamingContent('');
-
-      // Generate title after first assistant response
-      if (!title) {
-        generateTitle(finalMessages);
-      }
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
@@ -243,18 +273,54 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
         <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between shrink-0 gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className={`w-2 h-2 rounded-full shrink-0 ${seedText ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-            {isGeneratingTitle ? (
+            {isEditingTitle ? (
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                onBlur={handleSaveTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveTitle();
+                  if (e.key === 'Escape') setIsEditingTitle(false);
+                }}
+                className="text-sm font-medium text-stone-600 bg-stone-100 px-2 py-0.5 rounded border border-stone-300 outline-none focus:border-stone-400 min-w-0 flex-1 nodrag"
+                placeholder="enter title..."
+              />
+            ) : isGeneratingTitle ? (
               <span className="text-sm font-medium text-stone-400 italic">generating title...</span>
             ) : title ? (
-              <span className="text-sm font-medium text-stone-600 truncate" title={title}>
+              <span
+                className="text-sm font-medium text-stone-600 truncate cursor-pointer hover:text-stone-800 nodrag"
+                title={`${title} (click to edit)`}
+                onClick={() => {
+                  setEditedTitle(title);
+                  setIsEditingTitle(true);
+                }}
+              >
                 {title}
               </span>
             ) : seedText ? (
-              <span className="text-sm font-medium text-stone-600 truncate" title={`branched from: "${seedText}"`}>
+              <span
+                className="text-sm font-medium text-stone-600 truncate cursor-pointer hover:text-stone-800 nodrag"
+                title={`branched from: "${seedText}" (click to edit)`}
+                onClick={() => {
+                  setEditedTitle('');
+                  setIsEditingTitle(true);
+                }}
+              >
                 branched: &ldquo;{seedText.length > 20 ? seedText.slice(0, 20) + '...' : seedText}&rdquo;
               </span>
             ) : (
-              <span className="text-sm font-medium text-stone-600">new chat</span>
+              <span
+                className="text-sm font-medium text-stone-600 cursor-pointer hover:text-stone-800 nodrag"
+                onClick={() => {
+                  setEditedTitle('');
+                  setIsEditingTitle(true);
+                }}
+              >
+                new chat
+              </span>
             )}
           </div>
           <div className="flex items-center gap-1">
@@ -338,6 +404,7 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
 
         {/* Messages */}
         <div
+          ref={messagesContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-3 nodrag nopan nowheel cursor-text select-text"
           onMouseUp={handleMouseUp}
         >
@@ -397,8 +464,6 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
               </div>
             </div>
           )}
-
-          <div ref={messagesEndRef} />
         </div>
 
         {/* Input */}

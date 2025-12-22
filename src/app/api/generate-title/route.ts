@@ -6,30 +6,23 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    const { messages, seedText } = await request.json();
+    const { userQuestion, seedText } = await request.json();
 
-    // Build a prompt for title generation
-    let prompt = 'Generate a very short title (3-6 words) that summarizes this conversation. Return ONLY the title, no quotes, no punctuation at the end, no explanation.\n\n';
+    // Build a prompt for title generation based on the user's first question
+    let prompt = 'Generate a very short title (3-6 words) that summarizes what this question is about. Return ONLY the title, no quotes, no punctuation at the end, no explanation.\n\n';
     
     if (seedText) {
-      prompt += `This conversation was branched from the text: "${seedText}"\n\n`;
+      prompt += `Context (this is a branched conversation from): "${seedText.slice(0, 200)}"\n\n`;
     }
     
-    prompt += 'Conversation:\n';
-    for (const msg of messages) {
-      if (msg.role === 'user') {
-        prompt += `User: ${msg.content}\n`;
-      } else if (msg.role === 'assistant') {
-        prompt += `Assistant: ${msg.content.slice(0, 500)}${msg.content.length > 500 ? '...' : ''}\n`;
-      }
-    }
+    prompt += `User's question: "${userQuestion}"`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant that generates very short, descriptive titles for conversations. Keep titles to 3-6 words. Be specific and descriptive. Do not use quotes or punctuation at the end.',
+          content: 'You are a helpful assistant that generates very short, descriptive titles. Keep titles to 3-6 words. Be specific and descriptive. Do not use quotes or punctuation at the end. Focus on the main topic of the question.',
         },
         {
           role: 'user',
@@ -48,4 +41,3 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Failed to generate title' }, { status: 500 });
   }
 }
-

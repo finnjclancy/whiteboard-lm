@@ -15,6 +15,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import ChatNode from './ChatNode';
 import BranchPill from './BranchPill';
 import ContextMenu from './ContextMenu';
+import TreeSidebar from './TreeSidebar';
 import FocusedChat from '@/components/chat/FocusedChat';
 import type { ChatNode as ChatNodeType, BranchEdge, TextSelection } from '@/types';
 
@@ -110,6 +111,7 @@ function CanvasInner({
   });
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(canvasName);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when editing starts
@@ -475,6 +477,12 @@ function CanvasInner({
           >
             <Background color="#d6d3d1" gap={20} size={1} />
             <Controls className="bg-white border border-stone-200 rounded-lg shadow-sm" />
+            
+            {/* Tree sidebar */}
+            <TreeSidebar
+              isOpen={isSidebarOpen}
+              onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+            />
           </ReactFlow>
 
           {/* Context menu */}
