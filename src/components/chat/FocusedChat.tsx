@@ -7,17 +7,24 @@ import { createClient } from '@/lib/supabase/client';
 import { useCanvasStore } from '@/stores/canvasStore';
 import type { ChatNodeData, DbMessage } from '@/types';
 
+interface TextSelection {
+  text: string;
+  rect: DOMRect;
+}
+
 interface FocusedChatProps {
   nodeId: string;
   data: ChatNodeData;
   onClose: () => void;
+  onBranch: (seedText: string) => void;
 }
 
-export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps) {
+export default function FocusedChat({ nodeId, data, onClose, onBranch }: FocusedChatProps) {
   const [input, setInput] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
+  const [selection, setSelection] = useState<TextSelection | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -103,17 +110,61 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
     inputRef.current?.focus();
   }, []);
 
-  // Handle escape key to close
+  // Handle escape key to close (or clear selection first)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isEditingTitle) {
+      if (e.key === 'Escape') {
+        if (isEditingTitle) return;
+        if (selection) {
+          setSelection(null);
+          return;
+        }
         onClose();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, isEditingTitle]);
+  }, [onClose, isEditingTitle, selection]);
+
+  // Handle text selection for branching
+  const handleMouseUp = useCallback(() => {
+    const windowSelection = window.getSelection();
+    if (!windowSelection || windowSelection.isCollapsed) return;
+
+    const text = windowSelection.toString().trim();
+    if (text.length < 10) return; // Ignore very short selections
+
+    // Check if selection is within assistant message
+    const range = windowSelection.getRangeAt(0);
+    const container = range.commonAncestorContainer;
+    const messageEl = (container as Element).closest?.('.assistant-message') ||
+      (container.parentElement as Element)?.closest?.('.assistant-message');
+
+    if (!messageEl) return;
+
+    const rect = range.getBoundingClientRect();
+    setSelection({ text, rect });
+  }, []);
+
+  // Clear selection when clicking outside
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.branch-pill') && !window.getSelection()?.toString()) {
+        setSelection(null);
+      }
+    };
+
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  // Handle branch click
+  const handleBranch = useCallback(() => {
+    if (!selection) return;
+    onBranch(selection.text);
+  }, [selection, onBranch]);
 
   // Send message
   const handleSubmit = async (e: React.FormEvent) => {
@@ -349,7 +400,7 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
       )}
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto" onMouseUp={handleMouseUp}>
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="text-center text-stone-400 py-16">
@@ -366,7 +417,7 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                   message.role === 'user'
                     ? 'bg-stone-900 text-white'
-                    : 'bg-white border border-stone-200 text-stone-800'
+                    : 'bg-white border border-stone-200 text-stone-800 assistant-message'
                 }`}
               >
                 {message.role === 'user' ? (
@@ -383,7 +434,7 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
           {/* Streaming content */}
           {streamingContent && (
             <div className="flex justify-start">
-              <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-white border border-stone-200 text-stone-800">
+              <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-white border border-stone-200 text-stone-800 assistant-message">
                 <div className="prose prose-stone max-w-none break-words">
                   <ReactMarkdown>{streamingContent}</ReactMarkdown>
                 </div>
@@ -442,6 +493,40 @@ export default function FocusedChat({ nodeId, data, onClose }: FocusedChatProps)
           </div>
         </form>
       </div>
+
+      {/* Branch pill - appears when text is selected */}
+      {selection && (
+        <div
+          className="branch-pill fixed z-[60] transform -translate-x-1/2 -translate-y-full animate-in fade-in slide-in-from-bottom-2 duration-150"
+          style={{
+            left: selection.rect.left + selection.rect.width / 2,
+            top: selection.rect.top - 10,
+          }}
+        >
+          <button
+            onClick={handleBranch}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white text-sm font-medium rounded-full shadow-lg transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 3v12" />
+              <circle cx="18" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <path d="M18 9a9 9 0 0 1-9 9" />
+            </svg>
+            branch
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -515,6 +515,11 @@ function CanvasInner({
             nodeId={focusedNodeId}
             data={focusedNode.data}
             onClose={() => setFocusedNode(null)}
+            onBranch={(seedText: string) => {
+              // Close fullscreen first, then create branch
+              setFocusedNode(null);
+              handleBranch(seedText, focusedNodeId);
+            }}
           />
         );
       })()}
