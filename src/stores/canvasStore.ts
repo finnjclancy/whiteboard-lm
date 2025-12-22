@@ -5,13 +5,15 @@ import {
   type NodeChange,
   type EdgeChange,
 } from 'reactflow';
-import type { ChatNode, BranchEdge, DbMessage, CanvasState } from '@/types';
+import { v4 as uuidv4 } from 'uuid';
+import type { ChatNode, BranchEdge, DbMessage, CanvasState, QueueItem } from '@/types';
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   canvasId: null,
   nodes: [],
   edges: [],
   focusedNodeId: null,
+  queue: [],
 
   setCanvasId: (id: string) => set({ canvasId: id }),
 
@@ -62,6 +64,26 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     })),
 
   setFocusedNode: (nodeId: string | null) => set({ focusedNodeId: nodeId }),
+
+  addToQueue: (text: string, sourceNodeId: string) =>
+    set((state) => ({
+      queue: [
+        ...state.queue,
+        {
+          id: uuidv4(),
+          text,
+          sourceNodeId,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    })),
+
+  removeFromQueue: (id: string) =>
+    set((state) => ({
+      queue: state.queue.filter((item) => item.id !== id),
+    })),
+
+  clearQueue: () => set({ queue: [] }),
 
   onNodesChange: (changes: NodeChange[]) =>
     set((state) => ({

@@ -405,7 +405,7 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
         {/* Messages */}
         <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-3 nodrag nopan nowheel cursor-text select-text"
+          className="flex-1 overflow-y-auto p-4 space-y-3 nodrag nopan nowheel cursor-text select-text custom-scrollbar"
           onMouseUp={handleMouseUp}
         >
           {messages.length === 0 && !streamingContent && (
@@ -468,14 +468,28 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
 
         {/* Input */}
         <form onSubmit={handleSubmit} className="p-3 border-t border-stone-100 shrink-0">
-          <div className="flex gap-2">
-            <input
-              type="text"
+          <div className="flex gap-2 items-end">
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="type a message..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (input.trim() && !isLoading) {
+                    handleSubmit(e);
+                  }
+                }
+              }}
+              placeholder="type a message... (shift+enter for new line)"
               disabled={isLoading}
-              className="flex-1 px-3 py-2 text-sm rounded-lg border border-stone-200 focus:border-stone-400 focus:ring-1 focus:ring-stone-200 outline-none transition-all text-stone-900 placeholder:text-stone-400 disabled:bg-stone-50 nodrag"
+              rows={1}
+              className="flex-1 px-3 py-2 text-sm rounded-lg border border-stone-200 focus:border-stone-400 focus:ring-1 focus:ring-stone-200 outline-none transition-all text-stone-900 placeholder:text-stone-400 disabled:bg-stone-50 nodrag resize-none min-h-[38px] max-h-[120px]"
+              style={{ height: 'auto', overflow: 'hidden' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+              }}
             />
             <button
               type="submit"

@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import ReactMarkdown from 'react-markdown';
 import { createClient } from '@/lib/supabase/client';
 import { useCanvasStore } from '@/stores/canvasStore';
+import QueuePanel from '@/components/canvas/QueuePanel';
 import type { ChatNodeData, DbMessage } from '@/types';
 
 interface TextSelection {
@@ -26,10 +27,10 @@ export default function FocusedChat({ nodeId, data, onClose, onBranch }: Focused
   const [editedTitle, setEditedTitle] = useState('');
   const [selection, setSelection] = useState<TextSelection | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
-  const { nodes, updateNodeMessages, updateNodeLoading, updateNodeTitle, updateNodeGeneratingTitle } = useCanvasStore();
+  const { nodes, updateNodeMessages, updateNodeLoading, updateNodeTitle, updateNodeGeneratingTitle, addToQueue } = useCanvasStore();
 
   const { messages, seedText, parentNodeId, title, isLoading, isGeneratingTitle } = data;
 
@@ -165,6 +166,13 @@ export default function FocusedChat({ nodeId, data, onClose, onBranch }: Focused
     if (!selection) return;
     onBranch(selection.text);
   }, [selection, onBranch]);
+
+  // Handle add to queue click
+  const handleAddToQueue = useCallback(() => {
+    if (!selection) return;
+    addToQueue(selection.text, nodeId);
+    setSelection(null);
+  }, [selection, nodeId, addToQueue]);
 
   // Send message
   const handleSubmit = async (e: React.FormEvent) => {
@@ -400,7 +408,7 @@ export default function FocusedChat({ nodeId, data, onClose, onBranch }: Focused
       )}
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto" onMouseUp={handleMouseUp}>
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto custom-scrollbar" onMouseUp={handleMouseUp}>
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
           {messages.length === 0 && !streamingContent && (
             <div className="text-center text-stone-400 py-16">
@@ -460,15 +468,29 @@ export default function FocusedChat({ nodeId, data, onClose, onBranch }: Focused
       {/* Input */}
       <div className="bg-white border-t border-stone-200 px-4 py-4 shrink-0">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-          <div className="flex gap-3">
-            <input
+          <div className="flex gap-3 items-end">
+            <textarea
               ref={inputRef}
-              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="type a message..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (input.trim() && !isLoading) {
+                    handleSubmit(e);
+                  }
+                }
+              }}
+              placeholder="type a message... (shift+enter for new line)"
               disabled={isLoading}
-              className="flex-1 px-4 py-3 text-base rounded-xl border border-stone-200 focus:border-stone-400 focus:ring-2 focus:ring-stone-100 outline-none transition-all text-stone-900 placeholder:text-stone-400 disabled:bg-stone-50"
+              rows={1}
+              className="flex-1 px-4 py-3 text-base rounded-xl border border-stone-200 focus:border-stone-400 focus:ring-2 focus:ring-stone-100 outline-none transition-all text-stone-900 placeholder:text-stone-400 disabled:bg-stone-50 resize-none min-h-[50px] max-h-[200px]"
+              style={{ height: 'auto', overflow: 'hidden' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = Math.min(target.scrollHeight, 200) + 'px';
+              }}
             />
             <button
               type="submit"
@@ -494,7 +516,7 @@ export default function FocusedChat({ nodeId, data, onClose, onBranch }: Focused
         </form>
       </div>
 
-      {/* Branch pill - appears when text is selected */}
+      {/* Branch/Queue pill - appears when text is selected */}
       {selection && (
         <div
           className="branch-pill fixed z-[60] transform -translate-x-1/2 -translate-y-full animate-in fade-in slide-in-from-bottom-2 duration-150"
@@ -503,30 +525,58 @@ export default function FocusedChat({ nodeId, data, onClose, onBranch }: Focused
             top: selection.rect.top - 10,
           }}
         >
-          <button
-            onClick={handleBranch}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white text-sm font-medium rounded-full shadow-lg transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          <div className="flex items-center gap-1 bg-stone-900 rounded-full shadow-lg p-1">
+            <button
+              onClick={handleBranch}
+              className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-stone-700 text-white text-sm font-medium rounded-full transition-colors"
             >
-              <path d="M6 3v12" />
-              <circle cx="18" cy="6" r="3" />
-              <circle cx="6" cy="18" r="3" />
-              <path d="M18 9a9 9 0 0 1-9 9" />
-            </svg>
-            branch
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 3v12" />
+                <circle cx="18" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <path d="M18 9a9 9 0 0 1-9 9" />
+              </svg>
+              branch
+            </button>
+            <div className="w-px h-5 bg-stone-700" />
+            <button
+              onClick={handleAddToQueue}
+              className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-stone-700 text-white text-sm font-medium rounded-full transition-colors"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+                <path d="M12 11v6" />
+                <path d="M9 14h6" />
+              </svg>
+              queue
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Queue panel */}
+      <QueuePanel onInsert={(text) => setInput((prev) => prev + text)} />
     </div>
   );
 }

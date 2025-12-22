@@ -16,6 +16,7 @@ import ChatNode from './ChatNode';
 import BranchPill from './BranchPill';
 import ContextMenu from './ContextMenu';
 import TreeSidebar from './TreeSidebar';
+import QueuePanel from './QueuePanel';
 import FocusedChat from '@/components/chat/FocusedChat';
 import type { ChatNode as ChatNodeType, BranchEdge, TextSelection } from '@/types';
 
@@ -222,16 +223,67 @@ function CanvasInner({
   );
 
   // Create a new chat node
+  // Node dimensions for collision detection
+  const nodeWidth = 420;
+  const nodeHeight = 480;
+  const padding = 30;
+
+  // Helper to check if a position overlaps with any existing node
+  const checkOverlap = useCallback((x: number, y: number): boolean => {
+    return nodes.some((node) => {
+      const nodeRight = node.position.x + nodeWidth;
+      const nodeBottom = node.position.y + nodeHeight;
+      const testRight = x + nodeWidth;
+      const testBottom = y + nodeHeight;
+
+      return !(
+        x > nodeRight + padding ||
+        testRight < node.position.x - padding ||
+        y > nodeBottom + padding ||
+        testBottom < node.position.y - padding
+      );
+    });
+  }, [nodes]);
+
+  // Find a non-overlapping position near the target
+  const findClearPosition = useCallback((targetX: number, targetY: number): { x: number; y: number } => {
+    let position = { x: targetX, y: targetY };
+    
+    if (!checkOverlap(position.x, position.y)) {
+      return position;
+    }
+
+    // Try different offsets in a spiral pattern
+    const step = 200;
+    for (let ring = 1; ring <= 5; ring++) {
+      for (let i = 0; i < ring * 8; i++) {
+        const angle = (i / (ring * 8)) * Math.PI * 2;
+        const offsetX = Math.round(Math.cos(angle) * ring * step);
+        const offsetY = Math.round(Math.sin(angle) * ring * step);
+        
+        if (!checkOverlap(targetX + offsetX, targetY + offsetY)) {
+          return { x: targetX + offsetX, y: targetY + offsetY };
+        }
+      }
+    }
+
+    // Fallback: just offset far enough
+    return { x: targetX + 500, y: targetY };
+  }, [checkOverlap]);
+
   const handleCreateNode = useCallback(
     async (x: number, y: number) => {
       const nodeId = uuidv4();
+      
+      // Find a clear position
+      const position = findClearPosition(x, y);
 
       // Create in database
       const { error } = await supabase.from('nodes').insert({
         id: nodeId,
         canvas_id: canvasId,
-        position_x: x,
-        position_y: y,
+        position_x: position.x,
+        position_y: position.y,
       });
 
       if (error) {
@@ -243,7 +295,7 @@ function CanvasInner({
       const newNode: ChatNodeType = {
         id: nodeId,
         type: 'chatNode',
-        position: { x, y },
+        position,
         data: {
           messages: [],
           seedText: null,
@@ -257,7 +309,7 @@ function CanvasInner({
       addNode(newNode);
       setContextMenu({ show: false, x: 0, y: 0, flowX: 0, flowY: 0 });
     },
-    [canvasId, supabase, addNode]
+    [canvasId, supabase, addNode, findClearPosition]
   );
 
   // Create branch from selection
@@ -269,18 +321,10 @@ function CanvasInner({
       const nodeId = uuidv4();
       const edgeId = uuidv4();
 
-      // Count existing branches from this parent to offset the new one
-      const existingBranches = nodes.filter(
-        (n) => n.data.parentNodeId === parentNodeId
-      );
-      const branchIndex = existingBranches.length;
-
-      // Position new node to the right, with vertical offset based on branch count
-      // Each branch is offset by 150px vertically to avoid overlap
-      const position = {
-        x: parentNode.position.x + 480,
-        y: parentNode.position.y + (branchIndex * 180),
-      };
+      // Position new node to the right of parent, finding a clear spot
+      const targetX = parentNode.position.x + 480;
+      const targetY = parentNode.position.y;
+      const position = findClearPosition(targetX, targetY);
 
       // Create node in database
       const { error: nodeError } = await supabase.from('nodes').insert({
@@ -342,7 +386,7 @@ function CanvasInner({
       addEdge(newEdge);
       setSelection(null);
     },
-    [canvasId, nodes, supabase, addNode, addEdge]
+    [canvasId, nodes, supabase, addNode, addEdge, findClearPosition]
   );
 
   // Close context menu on click outside
@@ -477,13 +521,13 @@ function CanvasInner({
           >
             <Background color="#d6d3d1" gap={20} size={1} />
             <Controls className="bg-white border border-stone-200 rounded-lg shadow-sm" />
-            
-            {/* Tree sidebar */}
-            <TreeSidebar
-              isOpen={isSidebarOpen}
-              onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-            />
           </ReactFlow>
+
+          {/* Tree sidebar - outside ReactFlow for consistent visibility */}
+          <TreeSidebar
+            isOpen={isSidebarOpen}
+            onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+          />
 
           {/* Context menu */}
           {contextMenu.show && (
@@ -505,6 +549,9 @@ function CanvasInner({
           )}
         </div>
       </div>
+
+      {/* Queue panel */}
+      <QueuePanel />
 
       {/* Focused chat fullscreen overlay */}
       {focusedNodeId && (() => {

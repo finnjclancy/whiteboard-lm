@@ -59,6 +59,7 @@ export interface CanvasState {
   nodes: ChatNode[];
   edges: BranchEdge[];
   focusedNodeId: string | null;
+  queue: QueueItem[];
   setCanvasId: (id: string) => void;
   setNodes: (nodes: ChatNode[]) => void;
   setEdges: (edges: BranchEdge[]) => void;
@@ -69,6 +70,9 @@ export interface CanvasState {
   updateNodeTitle: (nodeId: string, title: string | null) => void;
   updateNodeGeneratingTitle: (nodeId: string, isGenerating: boolean) => void;
   setFocusedNode: (nodeId: string | null) => void;
+  addToQueue: (text: string, sourceNodeId: string) => void;
+  removeFromQueue: (id: string) => void;
+  clearQueue: () => void;
   onNodesChange: (changes: any) => void;
   onEdgesChange: (changes: any) => void;
 }
@@ -78,5 +82,13 @@ export interface TextSelection {
   text: string;
   nodeId: string;
   rect: DOMRect | null;
+}
+
+// Queue item for saved snippets
+export interface QueueItem {
+  id: string;
+  text: string;
+  sourceNodeId: string;
+  createdAt: string;
 }
 
