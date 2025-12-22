@@ -417,14 +417,14 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`${
+              className={`flex ${
                 message.role === 'user'
-                  ? 'ml-8'
-                  : 'mr-8 assistant-message'
+                  ? 'justify-end'
+                  : 'justify-start assistant-message'
               }`}
             >
               <div
-                className={`rounded-lg px-3 py-2 text-sm ${
+                className={`rounded-lg px-3 py-2 text-sm max-w-[85%] ${
                   message.role === 'user'
                     ? 'bg-stone-900 text-white'
                     : 'bg-stone-100 text-stone-800'
@@ -443,8 +443,8 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
 
           {/* Streaming content */}
           {streamingContent && (
-            <div className="mr-8 assistant-message">
-              <div className="rounded-lg px-3 py-2 text-sm bg-stone-100 text-stone-800">
+            <div className="flex justify-start assistant-message">
+              <div className="rounded-lg px-3 py-2 text-sm bg-stone-100 text-stone-800 max-w-[85%]">
                 <div className="prose prose-sm prose-stone max-w-none break-words">
                   <ReactMarkdown>{streamingContent}</ReactMarkdown>
                 </div>
@@ -454,7 +454,7 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
 
           {/* Loading indicator */}
           {isLoading && !streamingContent && (
-            <div className="mr-8">
+            <div className="flex justify-start">
               <div className="rounded-lg px-3 py-2 text-sm bg-stone-100 text-stone-400">
                 <div className="flex items-center gap-1">
                   <span className="animate-bounce">·</span>
