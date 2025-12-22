@@ -481,7 +481,7 @@ export default function FocusedChat({ nodeId, data, onClose, onBranch }: Focused
                   }
                 }
               }}
-              placeholder="type a message... (shift+enter for new line)"
+              placeholder="type a message..."
               disabled={isLoading}
               rows={1}
               className="flex-1 px-4 py-3 text-base rounded-xl border border-stone-200 focus:border-stone-400 focus:ring-2 focus:ring-stone-100 outline-none transition-all text-stone-900 placeholder:text-stone-400 disabled:bg-stone-50 resize-none min-h-[50px] max-h-[200px]"

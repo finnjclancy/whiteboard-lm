@@ -13,15 +13,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@/lib/supabase/client';
 import { useCanvasStore } from '@/stores/canvasStore';
 import ChatNode from './ChatNode';
+import TextNode from './TextNode';
 import BranchPill from './BranchPill';
 import ContextMenu from './ContextMenu';
 import TreeSidebar from './TreeSidebar';
 import QueuePanel from './QueuePanel';
 import FocusedChat from '@/components/chat/FocusedChat';
-import type { ChatNode as ChatNodeType, BranchEdge, TextSelection } from '@/types';
+import type { ChatNode as ChatNodeType, TextNode as TextNodeType, CanvasNode, BranchEdge, TextSelection } from '@/types';
 
 const nodeTypes = {
   chatNode: ChatNode,
+  textNode: TextNode,
 };
 
 // Context for passing selection handler to ChatNode
@@ -36,7 +38,7 @@ export const useSelection = () => useContext(SelectionContext);
 interface CanvasProps {
   canvasId: string;
   canvasName: string;
-  initialNodes: ChatNodeType[];
+  initialNodes: CanvasNode[];
   initialEdges: BranchEdge[];
 }
 
@@ -312,6 +314,45 @@ function CanvasInner({
     [canvasId, supabase, addNode, findClearPosition]
   );
 
+  // Create a text node
+  const handleCreateTextNode = useCallback(
+    async (x: number, y: number) => {
+      const nodeId = uuidv4();
+      
+      // Find a clear position
+      const position = findClearPosition(x, y);
+
+      // Create in database
+      const { error } = await supabase.from('nodes').insert({
+        id: nodeId,
+        canvas_id: canvasId,
+        position_x: position.x,
+        position_y: position.y,
+        node_type: 'text',
+        text_content: '',
+      });
+
+      if (error) {
+        console.error('Error creating text node:', error);
+        return;
+      }
+
+      // Add to store
+      const newNode: TextNodeType = {
+        id: nodeId,
+        type: 'textNode',
+        position,
+        data: {
+          content: '',
+        },
+      };
+
+      addNode(newNode);
+      setContextMenu({ show: false, x: 0, y: 0, flowX: 0, flowY: 0 });
+    },
+    [canvasId, supabase, addNode, findClearPosition]
+  );
+
   // Create branch from selection
   const handleBranch = useCallback(
     async (seedText: string, parentNodeId: string) => {
@@ -535,6 +576,7 @@ function CanvasInner({
               x={contextMenu.x}
               y={contextMenu.y}
               onCreateChat={() => handleCreateNode(contextMenu.flowX, contextMenu.flowY)}
+              onCreateText={() => handleCreateTextNode(contextMenu.flowX, contextMenu.flowY)}
               onClose={() => setContextMenu({ show: false, x: 0, y: 0, flowX: 0, flowY: 0 })}
             />
           )}

@@ -6,7 +6,7 @@ import {
   type EdgeChange,
 } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
-import type { ChatNode, BranchEdge, DbMessage, CanvasState, QueueItem } from '@/types';
+import type { CanvasNode, BranchEdge, DbMessage, CanvasState } from '@/types';
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   canvasId: null,
@@ -17,11 +17,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   setCanvasId: (id: string) => set({ canvasId: id }),
 
-  setNodes: (nodes: ChatNode[]) => set({ nodes }),
+  setNodes: (nodes: CanvasNode[]) => set({ nodes }),
 
   setEdges: (edges: BranchEdge[]) => set({ edges }),
 
-  addNode: (node: ChatNode) =>
+  addNode: (node: CanvasNode) =>
     set((state) => ({ nodes: [...state.nodes, node] })),
 
   addEdge: (edge: BranchEdge) =>
@@ -63,6 +63,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       ),
     })),
 
+  updateTextContent: (nodeId: string, content: string) =>
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, content } }
+          : node
+      ),
+    })),
+
   setFocusedNode: (nodeId: string | null) => set({ focusedNodeId: nodeId }),
 
   addToQueue: (text: string, sourceNodeId: string) =>
@@ -87,7 +96,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   onNodesChange: (changes: NodeChange[]) =>
     set((state) => ({
-      nodes: applyNodeChanges(changes, state.nodes) as ChatNode[],
+      nodes: applyNodeChanges(changes, state.nodes) as CanvasNode[],
     })),
 
   onEdgesChange: (changes: EdgeChange[]) =>
@@ -95,4 +104,3 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       edges: applyEdgeChanges(changes, state.edges),
     })),
 }));
-

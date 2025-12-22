@@ -17,6 +17,8 @@ export interface DbNode {
   position_y: number;
   seed_text: string | null;
   title: string | null;
+  node_type: 'chat' | 'text';
+  text_content: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,7 +39,7 @@ export interface DbEdge {
   created_at: string;
 }
 
-// React Flow node data
+// React Flow node data for chat nodes
 export interface ChatNodeData {
   messages: DbMessage[];
   seedText: string | null;
@@ -47,8 +49,15 @@ export interface ChatNodeData {
   isGeneratingTitle?: boolean;
 }
 
-// React Flow typed node
+// React Flow node data for text nodes
+export interface TextNodeData {
+  content: string;
+}
+
+// React Flow typed nodes
 export type ChatNode = Node<ChatNodeData>;
+export type TextNode = Node<TextNodeData>;
+export type CanvasNode = ChatNode | TextNode;
 
 // React Flow typed edge
 export type BranchEdge = Edge;
@@ -56,19 +65,20 @@ export type BranchEdge = Edge;
 // Canvas store state
 export interface CanvasState {
   canvasId: string | null;
-  nodes: ChatNode[];
+  nodes: CanvasNode[];
   edges: BranchEdge[];
   focusedNodeId: string | null;
   queue: QueueItem[];
   setCanvasId: (id: string) => void;
-  setNodes: (nodes: ChatNode[]) => void;
+  setNodes: (nodes: CanvasNode[]) => void;
   setEdges: (edges: BranchEdge[]) => void;
-  addNode: (node: ChatNode) => void;
+  addNode: (node: CanvasNode) => void;
   addEdge: (edge: BranchEdge) => void;
   updateNodeMessages: (nodeId: string, messages: DbMessage[]) => void;
   updateNodeLoading: (nodeId: string, isLoading: boolean) => void;
   updateNodeTitle: (nodeId: string, title: string | null) => void;
   updateNodeGeneratingTitle: (nodeId: string, isGenerating: boolean) => void;
+  updateTextContent: (nodeId: string, content: string) => void;
   setFocusedNode: (nodeId: string | null) => void;
   addToQueue: (text: string, sourceNodeId: string) => void;
   removeFromQueue: (id: string) => void;

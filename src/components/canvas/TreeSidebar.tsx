@@ -3,7 +3,12 @@
 import { useState, useMemo } from 'react';
 import { useReactFlow } from 'reactflow';
 import { useCanvasStore } from '@/stores/canvasStore';
-import type { ChatNode } from '@/types';
+import type { ChatNode, CanvasNode } from '@/types';
+
+// Type guard to check if a node is a chat node
+function isChatNode(node: CanvasNode): node is ChatNode {
+  return node.type === 'chatNode';
+}
 
 interface TreeNodeProps {
   node: ChatNode;
@@ -114,10 +119,14 @@ export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
   const { fitView, setCenter } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  // Build tree structure
-  const rootNodes = useMemo(() => {
-    return nodes.filter((node) => !node.data.parentNodeId);
+  // Filter to only chat nodes and build tree structure
+  const chatNodes = useMemo(() => {
+    return nodes.filter(isChatNode);
   }, [nodes]);
+
+  const rootNodes = useMemo(() => {
+    return chatNodes.filter((node) => !node.data.parentNodeId);
+  }, [chatNodes]);
 
   const handleNodeClick = (nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -133,7 +142,11 @@ export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
   };
 
   const handleDoubleClick = (nodeId: string) => {
-    setFocusedNode(nodeId);
+    // Only focus chat nodes
+    const node = nodes.find((n) => n.id === nodeId);
+    if (node && isChatNode(node)) {
+      setFocusedNode(nodeId);
+    }
   };
 
   return (
@@ -174,7 +187,7 @@ export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
           <div className="px-4 py-3 border-b border-stone-100">
             <h2 className="text-sm font-semibold text-stone-700">conversations</h2>
             <p className="text-xs text-stone-400 mt-0.5">
-              {nodes.length} chat{nodes.length !== 1 ? 's' : ''}
+              {chatNodes.length} chat{chatNodes.length !== 1 ? 's' : ''}
             </p>
           </div>
 
@@ -188,7 +201,7 @@ export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
               </div>
             ) : (
               rootNodes.map((node) => {
-                const children = nodes.filter((n) => n.data.parentNodeId === node.id);
+                const children = chatNodes.filter((n) => n.data.parentNodeId === node.id);
                 return (
                   <div 
                     key={node.id} 
@@ -197,7 +210,7 @@ export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
                     <TreeNode
                       node={node}
                       children={children}
-                      allNodes={nodes}
+                      allNodes={chatNodes}
                       level={0}
                       onNodeClick={handleNodeClick}
                       selectedNodeId={selectedNodeId}
@@ -217,4 +230,3 @@ export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
     </>
   );
 }
-

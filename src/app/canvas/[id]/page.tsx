@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import Canvas from '@/components/canvas/Canvas';
-import type { DbNode, DbMessage, DbEdge, ChatNode, BranchEdge } from '@/types';
+import type { DbNode, DbMessage, DbEdge, CanvasNode, ChatNode, TextNode, BranchEdge } from '@/types';
 
 interface CanvasPageProps {
   params: Promise<{ id: string }>;
@@ -51,22 +51,38 @@ export default async function CanvasPage({ params }: CanvasPageProps) {
     .select('*')
     .eq('canvas_id', id);
 
-  // Transform to React Flow format
-  const nodes: ChatNode[] = (dbNodes || []).map((node: DbNode) => ({
-    id: node.id,
-    type: 'chatNode',
-    position: { x: node.position_x, y: node.position_y },
-    data: {
-      messages: (dbMessages || []).filter(
-        (m: DbMessage) => m.node_id === node.id && m.role !== 'system'
-      ),
-      seedText: node.seed_text,
-      parentNodeId: node.parent_node_id,
-      title: node.title,
-      isLoading: false,
-      isGeneratingTitle: false,
-    },
-  }));
+  // Transform to React Flow format - handle both chat and text nodes
+  const nodes: CanvasNode[] = (dbNodes || []).map((node: DbNode) => {
+    const nodeType = node.node_type || 'chat';
+    
+    if (nodeType === 'text') {
+      return {
+        id: node.id,
+        type: 'textNode',
+        position: { x: node.position_x, y: node.position_y },
+        data: {
+          content: node.text_content || '',
+        },
+      } as TextNode;
+    }
+    
+    // Default to chat node
+    return {
+      id: node.id,
+      type: 'chatNode',
+      position: { x: node.position_x, y: node.position_y },
+      data: {
+        messages: (dbMessages || []).filter(
+          (m: DbMessage) => m.node_id === node.id && m.role !== 'system'
+        ),
+        seedText: node.seed_text,
+        parentNodeId: node.parent_node_id,
+        title: node.title,
+        isLoading: false,
+        isGeneratingTitle: false,
+      },
+    } as ChatNode;
+  });
 
   const edges: BranchEdge[] = (dbEdges || []).map((edge: DbEdge) => ({
     id: edge.id,
@@ -90,4 +106,3 @@ export default async function CanvasPage({ params }: CanvasPageProps) {
     />
   );
 }
-

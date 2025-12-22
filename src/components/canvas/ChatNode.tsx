@@ -480,7 +480,7 @@ function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
                   }
                 }
               }}
-              placeholder="type a message... (shift+enter for new line)"
+              placeholder="type a message..."
               disabled={isLoading}
               rows={1}
               className="flex-1 px-3 py-2 text-sm rounded-lg border border-stone-200 focus:border-stone-400 focus:ring-1 focus:ring-stone-200 outline-none transition-all text-stone-900 placeholder:text-stone-400 disabled:bg-stone-50 nodrag resize-none min-h-[38px] max-h-[120px]"
