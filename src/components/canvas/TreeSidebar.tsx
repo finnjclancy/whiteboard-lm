@@ -12,16 +12,16 @@ function isChatNode(node: CanvasNode): node is ChatNode {
 
 interface TreeNodeProps {
   node: ChatNode;
-  children: ChatNode[];
+  childNodes: ChatNode[];
   allNodes: ChatNode[];
   level: number;
   onNodeClick: (nodeId: string) => void;
   selectedNodeId: string | null;
 }
 
-function TreeNode({ node, children, allNodes, level, onNodeClick, selectedNodeId }: TreeNodeProps) {
+function TreeNode({ node, childNodes, allNodes, level, onNodeClick, selectedNodeId }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const hasChildren = children.length > 0;
+  const hasChildren = childNodes.length > 0;
 
   const title = node.data.title || (node.data.seedText 
     ? `branched: "${node.data.seedText.slice(0, 20)}${node.data.seedText.length > 20 ? '...' : ''}"`
@@ -81,7 +81,7 @@ function TreeNode({ node, children, allNodes, level, onNodeClick, selectedNodeId
         {/* Branch count badge */}
         {hasChildren && (
           <span className="text-xs text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded">
-            {children.length}
+            {childNodes.length}
           </span>
         )}
       </div>
@@ -89,13 +89,13 @@ function TreeNode({ node, children, allNodes, level, onNodeClick, selectedNodeId
       {/* Children */}
       {hasChildren && isExpanded && (
         <div>
-          {children.map((child) => {
+          {childNodes.map((child) => {
             const grandchildren = allNodes.filter((n) => n.data.parentNodeId === child.id);
             return (
               <TreeNode
                 key={child.id}
                 node={child}
-                children={grandchildren}
+                childNodes={grandchildren}
                 allNodes={allNodes}
                 level={level + 1}
                 onNodeClick={onNodeClick}
@@ -116,7 +116,7 @@ interface TreeSidebarProps {
 
 export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
   const { nodes, setFocusedNode } = useCanvasStore();
-  const { fitView, setCenter } = useReactFlow();
+  const { setCenter } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   // Filter to only chat nodes and build tree structure
@@ -209,7 +209,7 @@ export default function TreeSidebar({ isOpen, onToggle }: TreeSidebarProps) {
                   >
                     <TreeNode
                       node={node}
-                      children={children}
+                      childNodes={children}
                       allNodes={chatNodes}
                       level={0}
                       onNodeClick={handleNodeClick}

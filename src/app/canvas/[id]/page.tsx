@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import Canvas from '@/components/canvas/Canvas';
-import type { DbNode, DbMessage, DbEdge, CanvasNode, ChatNode, TextNode, BranchEdge } from '@/types';
+import { TEXT_STYLE_DEFAULTS, IMAGE_NODE_DEFAULTS } from '@/lib/canvasDefaults';
+import CanvasClient from '@/components/canvas/CanvasClient';
+import type { DbNode, DbMessage, DbEdge, CanvasNode, ChatNode, TextNode, ImageNode, BranchEdge } from '@/types';
 
 interface CanvasPageProps {
   params: Promise<{ id: string }>;
@@ -62,8 +63,26 @@ export default async function CanvasPage({ params }: CanvasPageProps) {
         position: { x: node.position_x, y: node.position_y },
         data: {
           content: node.text_content || '',
+          fontSize: node.text_font_size ?? TEXT_STYLE_DEFAULTS.fontSize,
+          fontFamily: node.text_font_family ?? TEXT_STYLE_DEFAULTS.fontFamily,
+          color: node.text_color ?? TEXT_STYLE_DEFAULTS.color,
+          isBulleted: node.text_is_bulleted ?? TEXT_STYLE_DEFAULTS.isBulleted,
+          background: node.text_background ?? TEXT_STYLE_DEFAULTS.background,
         },
       } as TextNode;
+    }
+
+    if (nodeType === 'image') {
+      return {
+        id: node.id,
+        type: 'imageNode',
+        position: { x: node.position_x, y: node.position_y },
+        data: {
+          src: node.image_data || '',
+          width: node.image_width ?? IMAGE_NODE_DEFAULTS.width,
+          height: node.image_height ?? IMAGE_NODE_DEFAULTS.height,
+        },
+      } as ImageNode;
     }
     
     // Default to chat node
@@ -98,7 +117,7 @@ export default async function CanvasPage({ params }: CanvasPageProps) {
   }));
 
   return (
-    <Canvas
+    <CanvasClient
       canvasId={id}
       canvasName={canvas.name}
       initialNodes={nodes}

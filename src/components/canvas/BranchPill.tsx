@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import type { TextSelection } from '@/types';
 
@@ -11,18 +11,13 @@ interface BranchPillProps {
 }
 
 export default function BranchPill({ selection, onBranch, onClose }: BranchPillProps) {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
   const { addToQueue } = useCanvasStore();
-
-  useEffect(() => {
-    if (!selection.rect) return;
-
-    // Position the pill above the selection
-    setPosition({
-      x: selection.rect.left + selection.rect.width / 2,
-      y: selection.rect.top - 10,
-    });
-  }, [selection.rect]);
+  const position = selection.rect
+    ? {
+        x: selection.rect.left + selection.rect.width / 2,
+        y: selection.rect.top - 10,
+      }
+    : { x: 0, y: 0 };
 
   const handleBranch = () => {
     onBranch(selection.text, selection.nodeId);

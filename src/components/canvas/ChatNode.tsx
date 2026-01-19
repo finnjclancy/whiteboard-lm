@@ -9,7 +9,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useSelection } from './Canvas';
 import type { ChatNodeData, DbMessage } from '@/types';
 
-function ChatNode({ id, data, selected }: NodeProps<ChatNodeData>) {
+function ChatNode({ id, data }: NodeProps<ChatNodeData>) {
   const [input, setInput] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   const [dimensions, setDimensions] = useState({ width: 400, height: 450 });

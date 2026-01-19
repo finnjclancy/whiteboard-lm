@@ -6,9 +6,9 @@ import {
   type EdgeChange,
 } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
-import type { CanvasNode, BranchEdge, DbMessage, CanvasState } from '@/types';
+import type { CanvasNode, BranchEdge, DbMessage, CanvasState, TextNodeData } from '@/types';
 
-export const useCanvasStore = create<CanvasState>((set, get) => ({
+export const useCanvasStore = create<CanvasState>((set) => ({
   canvasId: null,
   nodes: [],
   edges: [],
@@ -68,6 +68,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: state.nodes.map((node) =>
         node.id === nodeId
           ? { ...node, data: { ...node.data, content } }
+          : node
+      ),
+    })),
+
+  updateTextStyle: (nodeId: string, updates: Partial<TextNodeData>) =>
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.id === nodeId
+          ? { ...node, data: { ...node.data, ...updates } }
           : node
       ),
     })),

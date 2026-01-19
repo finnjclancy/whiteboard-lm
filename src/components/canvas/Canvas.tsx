@@ -6,24 +6,30 @@ import ReactFlow, {
   Controls,
   useReactFlow,
   ReactFlowProvider,
+  type NodeChange,
+  type NodePositionChange,
+  type NodeRemoveChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@/lib/supabase/client';
+import { TEXT_STYLE_DEFAULTS } from '@/lib/canvasDefaults';
 import { useCanvasStore } from '@/stores/canvasStore';
 import ChatNode from './ChatNode';
 import TextNode from './TextNode';
+import ImageNode from './ImageNode';
 import BranchPill from './BranchPill';
 import ContextMenu from './ContextMenu';
 import TreeSidebar from './TreeSidebar';
 import QueuePanel from './QueuePanel';
 import FocusedChat from '@/components/chat/FocusedChat';
-import type { ChatNode as ChatNodeType, TextNode as TextNodeType, CanvasNode, BranchEdge, TextSelection } from '@/types';
+import type { ChatNode as ChatNodeType, TextNode as TextNodeType, ImageNode as ImageNodeType, CanvasNode, BranchEdge, TextSelection } from '@/types';
 
 const nodeTypes = {
   chatNode: ChatNode,
   textNode: TextNode,
+  imageNode: ImageNode,
 };
 
 // Context for passing selection handler to ChatNode
@@ -43,22 +49,9 @@ interface CanvasProps {
 }
 
 export default function Canvas(props: CanvasProps) {
-  const [mounted, setMounted] = useState(false);
   const selectionRef = useRef<{
     onSelectionChange: (selection: TextSelection | null) => void;
   }>({ onSelectionChange: () => {} });
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-stone-100">
-        <div className="text-stone-400">loading canvas...</div>
-      </div>
-    );
-  }
 
   return (
     <ReactFlowProvider>
@@ -115,7 +108,10 @@ function CanvasInner({
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState(canvasName);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isImportingPdf, setIsImportingPdf] = useState(false);
+  const [pdfUploadOrigin, setPdfUploadOrigin] = useState<{ x: number; y: number } | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -157,12 +153,13 @@ function CanvasInner({
 
   // Handle node changes (position and deletion) - persist to DB
   const handleNodesChange = useCallback(
-    async (changes: any) => {
+    async (changes: NodeChange[]) => {
       onNodesChange(changes);
 
       // Persist position changes
       const positionChanges = changes.filter(
-        (change: any) => change.type === 'position' && change.dragging === false
+        (change): change is NodePositionChange =>
+          change.type === 'position' && change.dragging === false
       );
 
       for (const change of positionChanges) {
@@ -180,7 +177,7 @@ function CanvasInner({
 
       // Persist deletions
       const removeChanges = changes.filter(
-        (change: any) => change.type === 'remove'
+        (change): change is NodeRemoveChange => change.type === 'remove'
       );
 
       for (const change of removeChanges) {
@@ -224,6 +221,146 @@ function CanvasInner({
     [screenToFlowPosition]
   );
 
+  const handleOpenPdfUpload = useCallback(
+    (origin?: { x: number; y: number }) => {
+      if (isImportingPdf) return;
+      setPdfUploadOrigin(origin ?? null);
+      setContextMenu({ show: false, x: 0, y: 0, flowX: 0, flowY: 0 });
+      fileInputRef.current?.click();
+    },
+    [isImportingPdf, setContextMenu]
+  );
+
+  const handlePdfSelected = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      event.target.value = '';
+
+      setIsImportingPdf(true);
+
+      try {
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+          'pdfjs-dist/build/pdf.worker.min.mjs',
+          import.meta.url
+        ).toString();
+
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+
+        const origin =
+          pdfUploadOrigin ||
+          screenToFlowPosition({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+          });
+
+        const columns = 5;
+        const pageGap = 60;
+        const renderedPages: {
+          id: string;
+          imageData: string;
+          width: number;
+          height: number;
+        }[] = [];
+
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+          const page = await pdf.getPage(pageNumber);
+          const baseViewport = page.getViewport({ scale: 1 });
+          const targetWidth = 800;
+          const scale = Math.min(
+            2,
+            Math.max(0.5, targetWidth / baseViewport.width)
+          );
+          const viewport = page.getViewport({ scale });
+
+          const renderCanvas = document.createElement('canvas');
+          const context = renderCanvas.getContext('2d');
+          if (!context) continue;
+
+          renderCanvas.width = viewport.width;
+          renderCanvas.height = viewport.height;
+
+          await page.render({ canvasContext: context, viewport }).promise;
+
+          const imageData = renderCanvas.toDataURL('image/png');
+          renderedPages.push({
+            id: uuidv4(),
+            imageData,
+            width: Math.round(viewport.width),
+            height: Math.round(viewport.height),
+          });
+        }
+
+        if (renderedPages.length === 0) return;
+
+        const maxWidth = Math.max(...renderedPages.map((page) => page.width));
+        const maxHeight = Math.max(...renderedPages.map((page) => page.height));
+
+        const dbNodes = renderedPages.map((page, index) => {
+          const column = index % columns;
+          const row = Math.floor(index / columns);
+          const baseX = origin.x + column * (maxWidth + pageGap);
+          const baseY = origin.y + row * (maxHeight + pageGap);
+          const position = {
+            x: baseX + (maxWidth - page.width) / 2,
+            y: baseY + (maxHeight - page.height) / 2,
+          };
+
+          return {
+            id: page.id,
+            canvas_id: canvasId,
+            position_x: position.x,
+            position_y: position.y,
+            node_type: 'image' as const,
+            image_data: page.imageData,
+            image_width: page.width,
+            image_height: page.height,
+          };
+        });
+
+        const flowNodes: ImageNodeType[] = renderedPages.map((page, index) => {
+          const column = index % columns;
+          const row = Math.floor(index / columns);
+          const baseX = origin.x + column * (maxWidth + pageGap);
+          const baseY = origin.y + row * (maxHeight + pageGap);
+
+          return {
+            id: page.id,
+            type: 'imageNode',
+            position: {
+              x: baseX + (maxWidth - page.width) / 2,
+              y: baseY + (maxHeight - page.height) / 2,
+            },
+            data: {
+              src: page.imageData,
+              width: page.width,
+              height: page.height,
+            },
+          };
+        });
+
+        const { error } = await supabase.from('nodes').insert(dbNodes);
+        if (error) {
+          console.error('Error saving PDF pages:', error);
+          return;
+        }
+
+        for (const node of flowNodes) {
+          addNode(node);
+        }
+      } catch (error) {
+        console.error('Error importing PDF:', error);
+      } finally {
+        setIsImportingPdf(false);
+        setPdfUploadOrigin(null);
+      }
+    },
+    [addNode, canvasId, pdfUploadOrigin, screenToFlowPosition, supabase]
+  );
+
   // Create a new chat node
   // Node dimensions for collision detection
   const nodeWidth = 420;
@@ -249,7 +386,7 @@ function CanvasInner({
 
   // Find a non-overlapping position near the target
   const findClearPosition = useCallback((targetX: number, targetY: number): { x: number; y: number } => {
-    let position = { x: targetX, y: targetY };
+    const position = { x: targetX, y: targetY };
     
     if (!checkOverlap(position.x, position.y)) {
       return position;
@@ -344,6 +481,11 @@ function CanvasInner({
         position,
         data: {
           content: '',
+          fontSize: TEXT_STYLE_DEFAULTS.fontSize,
+          fontFamily: TEXT_STYLE_DEFAULTS.fontFamily,
+          color: TEXT_STYLE_DEFAULTS.color,
+          isBulleted: TEXT_STYLE_DEFAULTS.isBulleted,
+          background: TEXT_STYLE_DEFAULTS.background,
         },
       };
 
@@ -531,10 +673,41 @@ function CanvasInner({
               </button>
             )}
           </div>
-          <div className="text-sm text-stone-400">
-            right-click to create a chat
+          <div className="flex items-center gap-3 text-sm text-stone-400">
+            <button
+              onClick={() => handleOpenPdfUpload()}
+              disabled={isImportingPdf}
+              className="inline-flex items-center gap-2 rounded-md border border-stone-200 px-3 py-1.5 text-stone-600 hover:text-stone-800 hover:border-stone-300 transition-colors disabled:opacity-60 disabled:hover:border-stone-200"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M8 13h8" />
+                <path d="M8 17h8" />
+              </svg>
+              {isImportingPdf ? 'importing...' : 'upload pdf'}
+            </button>
+            <span>right-click to add nodes</span>
           </div>
         </header>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={handlePdfSelected}
+        />
 
         {/* Canvas */}
         <div className="flex-1 relative">
@@ -577,6 +750,9 @@ function CanvasInner({
               y={contextMenu.y}
               onCreateChat={() => handleCreateNode(contextMenu.flowX, contextMenu.flowY)}
               onCreateText={() => handleCreateTextNode(contextMenu.flowX, contextMenu.flowY)}
+              onUploadPdf={() =>
+                handleOpenPdfUpload({ x: contextMenu.flowX, y: contextMenu.flowY })
+              }
               onClose={() => setContextMenu({ show: false, x: 0, y: 0, flowX: 0, flowY: 0 })}
             />
           )}

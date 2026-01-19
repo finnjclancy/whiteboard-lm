@@ -1,4 +1,4 @@
-import type { Node, Edge } from 'reactflow';
+import type { Node, Edge, NodeChange, EdgeChange } from 'reactflow';
 
 // Database types (matching Supabase schema)
 export interface DbCanvas {
@@ -17,8 +17,16 @@ export interface DbNode {
   position_y: number;
   seed_text: string | null;
   title: string | null;
-  node_type: 'chat' | 'text';
+  node_type: 'chat' | 'text' | 'image';
   text_content: string | null;
+  text_font_family: string | null;
+  text_font_size: number | null;
+  text_color: string | null;
+  text_is_bulleted: boolean | null;
+  text_background: string | null;
+  image_data: string | null;
+  image_width: number | null;
+  image_height: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,12 +60,25 @@ export interface ChatNodeData {
 // React Flow node data for text nodes
 export interface TextNodeData {
   content: string;
+  fontSize: number;
+  fontFamily: string;
+  color: string;
+  isBulleted: boolean;
+  background: string;
+}
+
+// React Flow node data for image nodes
+export interface ImageNodeData {
+  src: string;
+  width: number;
+  height: number;
 }
 
 // React Flow typed nodes
 export type ChatNode = Node<ChatNodeData>;
 export type TextNode = Node<TextNodeData>;
-export type CanvasNode = ChatNode | TextNode;
+export type ImageNode = Node<ImageNodeData>;
+export type CanvasNode = ChatNode | TextNode | ImageNode;
 
 // React Flow typed edge
 export type BranchEdge = Edge;
@@ -79,12 +100,13 @@ export interface CanvasState {
   updateNodeTitle: (nodeId: string, title: string | null) => void;
   updateNodeGeneratingTitle: (nodeId: string, isGenerating: boolean) => void;
   updateTextContent: (nodeId: string, content: string) => void;
+  updateTextStyle: (nodeId: string, updates: Partial<TextNodeData>) => void;
   setFocusedNode: (nodeId: string | null) => void;
   addToQueue: (text: string, sourceNodeId: string) => void;
   removeFromQueue: (id: string) => void;
   clearQueue: () => void;
-  onNodesChange: (changes: any) => void;
-  onEdgesChange: (changes: any) => void;
+  onNodesChange: (changes: NodeChange[]) => void;
+  onEdgesChange: (changes: EdgeChange[]) => void;
 }
 
 // Text selection for branching
@@ -101,4 +123,3 @@ export interface QueueItem {
   sourceNodeId: string;
   createdAt: string;
 }
-
